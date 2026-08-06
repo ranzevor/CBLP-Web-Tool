@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CBLP 局部不透明文本编织器</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --panel: rgba(255,255,255,.92);
+      --text: #172033;
+      --muted: #667085;
+      --line: #d9deea;
+      --accent: #4f46e5;
+      --accent-2: #7c3aed;
+      --ok: #0f9f6e;
+      --warn: #d97706;
+      --bad: #dc2626;
+      --shadow: 0 18px 48px rgba(31,41,55,.10);
+      --radius: 18px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d111b;
+        --panel: rgba(20,26,39,.94);
+        --text: #edf2ff;
+        --muted: #9aa4b5;
+        --line: #30384a;
+        --accent: #8b7cff;
+        --accent-2: #b37aff;
+        --shadow: 0 18px 48px rgba(0,0,0,.28);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(79,70,229,.16), transparent 35%),
+        radial-gradient(circle at top right, rgba(124,58,237,.12), transparent 30%),
+        var(--bg);
+    }
+    .shell { width: min(1220px, calc(100% - 28px)); margin: 26px auto 48px; }
+    header { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 48px); letter-spacing: -.04em; }
+    .subtitle { margin: 0; color: var(--muted); max-width: 760px; line-height: 1.7; }
+    .badge { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; color: var(--muted); background: var(--panel); white-space: nowrap; }
+    .grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 18px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; backdrop-filter: blur(10px); }
+    .panel h2 { margin: 0 0 12px; font-size: 18px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 7px; }
+    textarea, input[type="text"], input[type="number"] {
+      width: 100%; border: 1px solid var(--line); border-radius: 13px; background: transparent; color: var(--text);
+      padding: 12px 13px; font: inherit; outline: none;
+    }
+    textarea:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,70,229,.13); }
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
+    }
+    .choice-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(127,127,127,.07);
+    }
+    .choice-option {
+      min-width: 0;
+      min-height: 56px;
+      padding: 8px 9px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 2px;
+      text-align: left;
+      line-height: 1.15;
+      background: transparent;
+      color: var(--muted);
+      box-shadow: none;
+    }
+    .choice-option strong { color: var(--text); font-size: 14px; }
+    .choice-option span { font-size: 12px; font-weight: 550; white-space: nowrap; }
+    .choice-option:hover { transform: none; background: rgba(127,127,127,.08); }
+    .choice-option[aria-checked="true"] {
+      border-color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 56%, var(--line));
+      background: rgba(79,70,229,.12);
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      box-shadow: 0 4px 14px rgba(79,70,229,.12);
+      color: var(--accent);
+    }
+    .choice-option[aria-checked="true"] strong { color: var(--accent); }
+    .choice-option:focus-visible {
+      outline: 3px solid rgba(79,70,229,.30);
+      outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent);
+      outline-offset: 2px;
+    }
+    .field-help { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    textarea { min-height: 235px; resize: vertical; line-height: 1.75; }
+    #output { min-height: 235px; font-size: 17px; }
+    .controls { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 13px; margin-top: 14px; }
+    .span-2 { grid-column: 1 / -1; }
+    .range-row { display: grid; grid-template-columns: 1fr 64px; gap: 10px; align-items: center; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .checks { display: flex; flex-wrap: wrap; gap: 12px 18px; }
+    .checks label { display: inline-flex; gap: 8px; align-items: center; margin: 0; color: var(--text); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button {
+      border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: transparent; color: var(--text);
+      font: inherit; cursor: pointer; font-weight: 650; min-height: 42px;
+      transition: transform .15s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:focus-visible { outline: 3px solid rgba(79,70,229,.30); outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent); outline-offset: 2px; }
+    button.primary { border: 0; color: white; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+    button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+    .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .preset.active { border-color: var(--accent); color: var(--accent); }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
+    .metric { border: 1px solid var(--line); border-radius: 14px; padding: 12px; min-height: 92px; }
+    .metric strong { display: block; font-size: 26px; margin: 5px 0 3px; }
+    .metric small { color: var(--muted); line-height: 1.35; }
+    .bar { height: 8px; border-radius: 999px; background: rgba(127,127,127,.18); overflow: hidden; margin-top: 8px; }
+    .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+    .risk-list { margin-top: 14px; display: grid; gap: 8px; }
+    .risk-item { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+    .risk-item code { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; }
+    .risk-score { font-variant-numeric: tabular-nums; color: var(--warn); font-weight: 700; }
+    details { margin-top: 18px; }
+    summary { cursor: pointer; font-weight: 700; }
+    .note { margin-top: 10px; padding: 12px 14px; border-left: 4px solid var(--warn); background: rgba(217,119,6,.08); border-radius: 10px; color: var(--muted); line-height: 1.65; }
+    .status { min-height: 22px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .footer { margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      header { align-items: flex-start; flex-direction: column; }
+    }
+    @media (max-width: 540px) {
+      .controls, .metrics { grid-template-columns: 1fr; }
+      .span-2 { grid-column: auto; }
+      .choice-option { min-height: 52px; padding-inline: 8px; }
+      .choice-option strong { font-size: 13px; }
+      .choice-option span { font-size: 11px; }
+      .toolbar > button { flex: 1 1 auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>CBLP 文本编织器</h1>
+        <p class="subtitle">利用中文阅读的全局纠错能力，保持整句大致可读，同时尽量破坏连续短片段的独立可读性。全部计算在浏览器本地完成。</p>
+      </div>
+      <div class="badge">纯前端 · 无上传</div>
+    </header>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>1. 输入原文</h2>
+        <textarea id="input" spellcheck="false">该模型准确率高于基线，但尚未在真实生产环境中得到验证，因此不能认为它适合大规模部署。</textarea>
+
+        <div class="presets" aria-label="强度预设">
+          <button class="preset" data-preset="light">轻度</button>
+          <button class="preset active" data-preset="balanced">均衡</button>
+          <button class="preset" data-preset="strong">强度</button>
+        </div>
+
+        <div class="controls">
+          <div>
+            <label for="k">重点检查的最大片段长度 k</label>
+            <input id="k" type="number" min="4" max="30" value="14" />
+          </div>
+          <div>
+            <label for="d">单字最大位移 d</label>
+            <input id="d" type="number" min="1" max="5" value="2" />
+          </div>
+          <div>
+            <label id="attemptsLabel">候选搜索次数</label>
+            <select id="attempts" class="visually-hidden" tabindex="-1" aria-hidden="true">
+              <option value="24">快速 · 24</option>
+              <option value="64" selected>标准 · 64</option>
+              <option value="140">精细 · 140</option>
+            </select>
+            <div id="attemptsControl" class="choice-grid" role="radiogroup" aria-labelledby="attemptsLabel">
+              <button type="button" class="choice-option" role="radio" aria-checked="false" tabindex="-1" data-value="24">
+                <strong>快速</strong><span>24 轮</span>
+              </button>
+              <button type="button" class="choice-option" role="radio" aria-checked="true" tabindex="0" data-value="64">
+                <strong>标准</strong><span>64 轮</span>
+              </button>
+              <button type="button" class="choice-option" role="radio" aria-checked="false" tabindex="-1" data-value="140">
+                <strong>精细</strong><span>140 轮</span>
+              </button>
+            </div>
+            <div id="attemptsHint" class="field-help">质量与生成速度较平衡</div>
+          </div>
+          <div>
+            <label for="seed">随机种子</label>
+            <input id="seed" type="text" value="CBLP-2026" />
+          </div>
+          <div class="span-2">
+            <label for="intensity">扰动强度</label>
+            <div class="range-row">
+              <input id="intensity" type="range" min="20" max="100" value="65" />
+              <input id="intensityNumber" type="number" min="20" max="100" value="65" />
+            </div>
+          </div>
+          <div class="span-2">
+            <label for="sensitive">重点保护短语（每行一个，可选）</label>
+            <textarea id="sensitive" style="min-height:92px" placeholder="例如：\n准确率高于基线\n适合大规模部署"></textarea>
+          </div>
+          <div class="span-2 checks">
+            <label><input id="keepEdges" type="checkbox" checked /> 尽量保留分句首尾</label>
+            <label><input id="protectLatin" type="checkbox" checked /> 不打乱英文、数字与网址</label>
+            <label><input id="avoidSame" type="checkbox" checked /> 强制打断连续 3 字原文片段</label>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <button id="generate" class="primary">生成编织文本</button>
+          <button id="newSeed">换一个种子</button>
+          <button id="reset">恢复示例</button>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </article>
+
+      <article class="panel">
+        <h2>2. 输出与检测</h2>
+        <textarea id="output" spellcheck="false" placeholder="生成结果会出现在这里"></textarea>
+        <div class="toolbar">
+          <button id="copy">复制结果</button>
+          <button id="download">下载 TXT</button>
+          <button id="recheck">重新检测</button>
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <small>全文可读性</small>
+            <strong id="readability">—</strong>
+            <div class="bar"><span id="readabilityBar" style="width:0"></span></div>
+          </div>
+          <div class="metric">
+            <small>局部不透明度</small>
+            <strong id="opacity">—</strong>
+            <div class="bar"><span id="opacityBar" style="width:0"></span></div>
+          </div>
+          <div class="metric">
+            <small>最长原样连续片段</small>
+            <strong id="lcs">—</strong>
+            <small>字符数</small>
+          </div>
+          <div class="metric">
+            <small>平均字符位移</small>
+            <strong id="avgDisp">—</strong>
+            <small>仅统计被处理的汉字</small>
+          </div>
+        </div>
+
+        <div id="riskList" class="risk-list"></div>
+
+        <details>
+          <summary>算法说明与边界</summary>
+          <div class="note">
+            这是认知混淆，不是密码学。工具使用有界局部换位、多候选搜索、原始 n-gram 破坏和短窗口风险扫描。评分只是启发式估计；截图、人工重排、OCR 或语言模型仍可能恢复内容。
+          </div>
+        </details>
+      </article>
+    </section>
+
+    <div class="footer">CBLP · 所有文本只在当前浏览器标签页中处理</div>
+  </main>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    input: $('input'), output: $('output'), k: $('k'), d: $('d'), attempts: $('attempts'),
+    attemptsControl: $('attemptsControl'), attemptsHint: $('attemptsHint'), seed: $('seed'),
+    intensity: $('intensity'), intensityNumber: $('intensityNumber'), sensitive: $('sensitive'),
+    keepEdges: $('keepEdges'), protectLatin: $('protectLatin'), avoidSame: $('avoidSame'),
+    generate: $('generate'), newSeed: $('newSeed'), reset: $('reset'), copy: $('copy'), download: $('download'), recheck: $('recheck'),
+    status: $('status'), readability: $('readability'), opacity: $('opacity'), lcs: $('lcs'), avgDisp: $('avgDisp'),
+    readabilityBar: $('readabilityBar'), opacityBar: $('opacityBar'), riskList: $('riskList')
+  };
+
+  const EXAMPLE = '该模型准确率高于基线，但尚未在真实生产环境中得到验证，因此不能认为它适合大规模部署。';
+  const ATTEMPT_HINTS = {
+    24: '生成更快，适合短文本和快速预览',
+    64: '质量与生成速度较平衡',
+    140: '搜索更充分，长文本可能需要稍等'
+  };
+  let lastMeta = null;
+
+  function setAttempts(value, focus = false) {
+    const normalized = String(value);
+    els.attempts.value = normalized;
+    const buttons = Array.from(els.attemptsControl.querySelectorAll('.choice-option'));
+    for (const button of buttons) {
+      const active = button.dataset.value === normalized;
+      button.setAttribute('aria-checked', String(active));
+      button.tabIndex = active ? 0 : -1;
+      if (active && focus) button.focus();
+    }
+    els.attemptsHint.textContent = ATTEMPT_HINTS[Number(normalized)] || '';
+  }
+
+  function hashString(str) {
+    let h = 2166136261 >>> 0;
+    for (const ch of str) {
+      h ^= ch.codePointAt(0);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function mulberry32(seed) {
+    return function() {
+      let t = seed += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+  function isHan(ch) { return /\p{Script=Han}/u.test(ch); }
+  function isLatinOrNumber(ch) { return /[A-Za-z0-9]/.test(ch); }
+  function isHardBoundary(ch) { return /[，。！？；：、,.!?;:\n\r\t（）()【】\[\]“”‘’《》<>\-—…]/u.test(ch); }
+
+  function tokenize(text, protectLatin) {
+    const chars = Array.from(text);
+    const segments = [];
+    let buffer = [];
+    const flush = () => {
+      if (!buffer.length) return;
+      segments.push({ type: 'run', chars: buffer });
+      buffer = [];
+    };
+
+    for (let i = 0; i < chars.length; i++) {
+      const ch = chars[i];
+      if (isHardBoundary(ch) || /\s/.test(ch)) {
+        flush();
+        segments.push({ type: 'fixed', text: ch });
+        continue;
+      }
+      if (protectLatin && isLatinOrNumber(ch)) {
+        flush();
+        let token = ch;
+        while (i + 1 < chars.length && /[A-Za-z0-9_./:@#?=&%+-]/.test(chars[i + 1])) token += chars[++i];
+        segments.push({ type: 'fixed', text: token });
+        continue;
+      }
+      buffer.push(ch);
+    }
+    flush();
+    return segments;
+  }
+
+  function validSwap(arr, i, j, d) {
+    if (i === j || i < 0 || j < 0 || i >= arr.length || j >= arr.length) return false;
+    const a = arr[i], b = arr[j];
+    return Math.abs(a.orig - j) <= d && Math.abs(b.orig - i) <= d;
+  }
+
+  function makeCandidate(chars, opts, rng) {
+    const arr = chars.map((ch, i) => ({ ch, orig: i }));
+    const n = arr.length;
+    if (n < 3) return arr;
+
+    const strength = opts.intensity / 100;
+    const steps = Math.max(2, Math.round(n * (1.3 + strength * 3.8)));
+    const start = opts.keepEdges && n >= 5 ? 1 : 0;
+    const end = opts.keepEdges && n >= 5 ? n - 1 : n;
+
+    for (let s = 0; s < steps; s++) {
+      const i = start + Math.floor(rng() * Math.max(1, end - start));
+      const span = 1 + Math.floor(rng() * opts.d);
+      const direction = rng() < 0.5 ? -1 : 1;
+      const j = clamp(i + direction * span, start, end - 1);
+      if (validSwap(arr, i, j, opts.d)) [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+
+    // 额外打断仍然保留的三连字。
+    if (opts.avoidSame && n >= 4) {
+      for (let i = start; i < end - 2; i++) {
+        const unchanged3 = arr[i].orig + 1 === arr[i + 1].orig && arr[i + 1].orig + 1 === arr[i + 2].orig;
+        if (!unchanged3) continue;
+        const j = Math.min(end - 1, i + 2);
+        const k = Math.min(end - 1, i + 3);
+        if (validSwap(arr, j, k, opts.d)) [arr[j], arr[k]] = [arr[k], arr[j]];
+        else if (validSwap(arr, i + 1, j, opts.d)) [arr[i + 1], arr[j]] = [arr[j], arr[i + 1]];
+      }
+    }
+    return arr;
+  }
+
+  function ngramSet(text, minN, maxN) {
+    const a = Array.from(text);
+    const sets = new Map();
+    for (let n = minN; n <= maxN; n++) {
+      const set = new Set();
+      for (let i = 0; i <= a.length - n; i++) set.add(a.slice(i, i + n).join(''));
+      sets.set(n, set);
+    }
+    return sets;
+  }
+
+  function longestCommonSubstring(aText, bText, cap = Infinity) {
+    const a = Array.from(aText), b = Array.from(bText);
+    const dp = new Uint16Array(b.length + 1);
+    let best = 0;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = b.length; j >= 1; j--) {
+        if (a[i - 1] === b[j - 1]) {
+          dp[j] = dp[j - 1] + 1;
+          if (dp[j] > best) best = dp[j];
+        } else dp[j] = 0;
+      }
+    }
+    return Math.min(best, cap);
+  }
+
+  function scoreRun(originalChars, candidate, opts, sensitivePhrases) {
+    const original = originalChars.join('');
+    const output = candidate.map(x => x.ch).join('');
+    const maxN = Math.min(8, opts.k, originalChars.length);
+    const grams = ngramSet(original, 3, Math.max(3, maxN));
+    let survived = 0, total = 0;
+    for (const [n, set] of grams.entries()) {
+      const weight = n * n;
+      for (const g of set) {
+        total += weight;
+        if (output.includes(g)) survived += weight;
+      }
+    }
+    const survivalRatio = total ? survived / total : 0;
+    const avgDisp = candidate.reduce((s, x, i) => s + Math.abs(x.orig - i), 0) / Math.max(1, candidate.length);
+    const unmoved = candidate.filter((x, i) => x.orig === i).length / Math.max(1, candidate.length);
+    const lcs = longestCommonSubstring(original, output, opts.k);
+    let sensitiveLeak = 0;
+    for (const phrase of sensitivePhrases) {
+      if (phrase.length >= 2 && output.includes(phrase)) sensitiveLeak += phrase.length * phrase.length;
+    }
+
+    const opacityGain = (1 - survivalRatio) * 110 + (1 - unmoved) * 24 - lcs * 2.8 - sensitiveLeak * 3;
+    const readingCost = avgDisp * 15 + Math.max(0, avgDisp - 1.6) * 18;
+    const opacityWeight = 0.75 + opts.intensity / 100;
+    const readabilityWeight = 1.55 - opts.intensity / 180;
+    return opacityGain * opacityWeight - readingCost * readabilityWeight;
+  }
+
+  function scrambleRun(chars, opts, rng, sensitivePhrases) {
+    if (chars.length < 3 || chars.filter(isHan).length < 2) {
+      return { text: chars.join(''), mapping: chars.map((_, i) => ({ orig: i, out: i, ch: chars[i] })) };
+    }
+    let best = chars.map((ch, i) => ({ ch, orig: i }));
+    let bestScore = -Infinity;
+    for (let a = 0; a < opts.attempts; a++) {
+      const candidate = makeCandidate(chars, opts, rng);
+      const score = scoreRun(chars, candidate, opts, sensitivePhrases);
+      if (score > bestScore) { best = candidate; bestScore = score; }
+    }
+    return {
+      text: best.map(x => x.ch).join(''),
+      mapping: best.map((x, out) => ({ orig: x.orig, out, ch: x.ch }))
+    };
+  }
+
+  function compileOptions() {
+    return {
+      k: clamp(Number(els.k.value) || 14, 4, 30),
+      d: clamp(Number(els.d.value) || 2, 1, 5),
+      attempts: clamp(Number(els.attempts.value) || 64, 8, 220),
+      intensity: clamp(Number(els.intensity.value) || 65, 20, 100),
+      seed: els.seed.value || 'CBLP',
+      keepEdges: els.keepEdges.checked,
+      protectLatin: els.protectLatin.checked,
+      avoidSame: els.avoidSame.checked
+    };
+  }
+
+  async function generate() {
+    const original = els.input.value;
+    if (!original.trim()) { els.status.textContent = '请先输入文本。'; return; }
+    const opts = compileOptions();
+    const originalButtonText = els.generate.textContent;
+    els.generate.disabled = true;
+    els.generate.textContent = '生成中…';
+    els.status.textContent = `正在搜索 ${opts.attempts} 轮候选，请稍候…`;
+    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    try {
+      const sensitive = els.sensitive.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      const rng = mulberry32(hashString(opts.seed + '|' + original + '|' + JSON.stringify(opts)));
+      const segments = tokenize(original, opts.protectLatin);
+      let output = '';
+      const mappings = [];
+      let globalOffsetOriginal = 0;
+      let globalOffsetOutput = 0;
+
+      for (const seg of segments) {
+        if (seg.type === 'fixed') {
+          output += seg.text;
+          const len = Array.from(seg.text).length;
+          globalOffsetOriginal += len;
+          globalOffsetOutput += len;
+          continue;
+        }
+        const result = scrambleRun(seg.chars, opts, rng, sensitive);
+        output += result.text;
+        for (const m of result.mapping) {
+          mappings.push({
+            orig: globalOffsetOriginal + m.orig,
+            out: globalOffsetOutput + m.out,
+            ch: m.ch
+          });
+        }
+        globalOffsetOriginal += seg.chars.length;
+        globalOffsetOutput += Array.from(result.text).length;
+      }
+
+      els.output.value = output;
+      lastMeta = { original, output, mappings, opts, sensitive };
+      analyze(lastMeta);
+      els.status.textContent = `已从 ${opts.attempts} 轮候选中生成结果。可继续换种子寻找更好的版本。`;
+    } catch (error) {
+      console.error(error);
+      els.status.textContent = '生成失败，请缩短文本或降低候选搜索次数后重试。';
+    } finally {
+      els.generate.disabled = false;
+      els.generate.textContent = originalButtonText;
+    }
+  }
+
+  function normalizedForAnalysis(text) {
+    return Array.from(text).filter(ch => !isHardBoundary(ch) && !/\s/.test(ch)).join('');
+  }
+
+  function estimateAvgDisplacement(meta) {
+    if (!meta.mappings.length) return 0;
+    return meta.mappings.reduce((s, m) => s + Math.abs(m.orig - m.out), 0) / meta.mappings.length;
+  }
+
+  function buildOriginalGramMap(original, maxK) {
+    const chars = Array.from(original);
+    const maps = new Map();
+    for (let n = 3; n <= maxK; n++) {
+      const m = new Map();
+      for (let i = 0; i <= chars.length - n; i++) {
+        const g = chars.slice(i, i+n).join('');
+        m.set(g, (m.get(g) || 0) + 1);
+      }
+      maps.set(n, m);
+    }
+    return maps;
+  }
+
+  function canonicalBag(str) {
+    return Array.from(str).sort().join('');
+  }
+
+  function topRiskWindows(original, output, k, limit = 7) {
+    const o = Array.from(normalizedForAnalysis(original));
+    const y = Array.from(normalizedForAnalysis(output));
+    const risks = [];
+    const maxLen = Math.min(k, y.length, 18);
+    const bagIndex = new Map();
+
+    for (let n = 4; n <= maxLen; n++) {
+      const m = new Map();
+      for (let i = 0; i <= o.length - n; i++) {
+        const key = canonicalBag(o.slice(i, i+n).join(''));
+        const list = m.get(key) || [];
+        list.push(o.slice(i, i+n).join(''));
+        m.set(key, list);
+      }
+      bagIndex.set(n, m);
+    }
+
+    for (let n = 4; n <= maxLen; n++) {
+      for (let i = 0; i <= y.length - n; i++) {
+        const frag = y.slice(i, i+n).join('');
+        const direct = longestCommonSubstring(frag, normalizedForAnalysis(original), n) / n;
+        const matches = bagIndex.get(n).get(canonicalBag(frag)) || [];
+        const uniqueBag = matches.length === 1 ? 1 : matches.length > 1 ? 0.45 : 0;
+        const naturalPairs = (() => {
+          let count = 0;
+          for (let j = 0; j < frag.length - 1; j++) {
+            if (normalizedForAnalysis(original).includes(frag.slice(j, j+2))) count++;
+          }
+          return count / Math.max(1, frag.length - 1);
+        })();
+        const score = clamp(Math.round((direct * .45 + uniqueBag * .35 + naturalPairs * .2) * 100), 0, 100);
+        if (score >= 38) risks.push({ frag, score, hint: matches[0] || '' });
+      }
+    }
+    const seen = new Set();
+    return risks.sort((a,b) => b.score - a.score || b.frag.length - a.frag.length).filter(r => {
+      if (seen.has(r.frag)) return false;
+      seen.add(r.frag); return true;
+    }).slice(0, limit);
+  }
+
+  function analyze(meta) {
+    const o = normalizedForAnalysis(meta.original);
+    const y = normalizedForAnalysis(meta.output);
+    const k = meta.opts.k;
+    const lcs = longestCommonSubstring(o, y, k);
+    const avgDisp = estimateAvgDisplacement(meta);
+
+    const maxN = Math.min(8, k, o.length);
+    let total = 0, survived = 0;
+    const gramMaps = buildOriginalGramMap(o, maxN);
+    for (const [n, map] of gramMaps.entries()) {
+      for (const g of map.keys()) {
+        const w = n * n;
+        total += w;
+        if (y.includes(g)) survived += w;
+      }
+    }
+    const survival = total ? survived / total : 0;
+    const readability = clamp(Math.round(100 - avgDisp * 17 - Math.max(0, meta.opts.d - 2) * 4 - Math.max(0, meta.opts.intensity - 75) * .16), 5, 99);
+    let opacity = clamp(Math.round(100 - survival * 75 - (lcs / Math.max(3, k)) * 25 + Math.min(avgDisp, 2.5) * 8), 1, 99);
+    for (const phrase of meta.sensitive) if (phrase && meta.output.includes(phrase)) opacity = Math.max(1, opacity - 18);
+
+    els.readability.textContent = readability;
+    els.opacity.textContent = opacity;
+    els.lcs.textContent = lcs;
+    els.avgDisp.textContent = avgDisp.toFixed(2);
+    els.readabilityBar.style.width = readability + '%';
+    els.opacityBar.style.width = opacity + '%';
+
+    const risks = topRiskWindows(meta.original, meta.output, k);
+    els.riskList.innerHTML = '';
+    if (!risks.length) {
+      const div = document.createElement('div');
+      div.className = 'risk-item';
+      div.innerHTML = '<code>未发现明显高风险短窗口</code><span class="risk-score">较低</span>';
+      els.riskList.appendChild(div);
+    } else {
+      const title = document.createElement('div');
+      title.style.cssText = 'color:var(--muted);font-size:13px;margin-top:2px';
+      title.textContent = '风险最高的可截取短窗口（启发式）';
+      els.riskList.appendChild(title);
+      for (const r of risks) {
+        const div = document.createElement('div');
+        div.className = 'risk-item';
+        const left = document.createElement('code');
+        left.textContent = `“${r.frag}”${r.hint ? `  → 可能还原为“${r.hint}”` : ''}`;
+        const score = document.createElement('span');
+        score.className = 'risk-score';
+        score.textContent = r.score + '%';
+        div.append(left, score);
+        els.riskList.appendChild(div);
+      }
+    }
+  }
+
+  const presets = {
+    light: { k: 10, d: 1, intensity: 42, attempts: 24, keepEdges: true },
+    balanced: { k: 14, d: 2, intensity: 65, attempts: 64, keepEdges: true },
+    strong: { k: 18, d: 3, intensity: 88, attempts: 140, keepEdges: false }
+  };
+
+  document.querySelectorAll('.preset').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const p = presets[btn.dataset.preset];
+    els.k.value = p.k; els.d.value = p.d; els.intensity.value = p.intensity; els.intensityNumber.value = p.intensity;
+    setAttempts(p.attempts); els.keepEdges.checked = p.keepEdges;
+  }));
+
+  const attemptButtons = Array.from(els.attemptsControl.querySelectorAll('.choice-option'));
+  attemptButtons.forEach((button, index) => {
+    button.addEventListener('click', () => setAttempts(button.dataset.value));
+    button.addEventListener('keydown', event => {
+      let nextIndex = null;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % attemptButtons.length;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + attemptButtons.length) % attemptButtons.length;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = attemptButtons.length - 1;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      setAttempts(attemptButtons[nextIndex].dataset.value, true);
+    });
+  });
+
+  els.intensity.addEventListener('input', () => els.intensityNumber.value = els.intensity.value);
+  els.intensityNumber.addEventListener('input', () => els.intensity.value = clamp(Number(els.intensityNumber.value) || 65, 20, 100));
+  els.generate.addEventListener('click', generate);
+  els.newSeed.addEventListener('click', () => {
+    els.seed.value = 'CBLP-' + Math.random().toString(36).slice(2, 9).toUpperCase();
+    generate();
+  });
+  els.reset.addEventListener('click', () => {
+    els.input.value = EXAMPLE; els.output.value = ''; els.sensitive.value = '';
+    els.seed.value = 'CBLP-2026'; els.status.textContent = ''; lastMeta = null;
+    ['readability','opacity','lcs','avgDisp'].forEach(id => $(id).textContent = '—');
+    els.readabilityBar.style.width = els.opacityBar.style.width = '0'; els.riskList.innerHTML = '';
+  });
+  els.copy.addEventListener('click', async () => {
+    if (!els.output.value) return;
+    try { await navigator.clipboard.writeText(els.output.value); els.status.textContent = '已复制输出文本。'; }
+    catch { els.output.select(); document.execCommand('copy'); els.status.textContent = '已复制输出文本。'; }
+  });
+  els.download.addEventListener('click', () => {
+    if (!els.output.value) return;
+    const blob = new Blob([els.output.value], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cblp-output.txt'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  });
+  els.recheck.addEventListener('click', () => {
+    if (!els.output.value) return;
+    const opts = compileOptions();
+    const sensitive = els.sensitive.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const meta = lastMeta && lastMeta.output === els.output.value
+      ? { ...lastMeta, opts, sensitive }
+      : { original: els.input.value, output: els.output.value, mappings: [], opts, sensitive };
+    analyze(meta); els.status.textContent = '已按当前参数重新检测。';
+  });
+
+  setAttempts(els.attempts.value);
+  generate();
+})();
+</script>
+</body>
+</html>
