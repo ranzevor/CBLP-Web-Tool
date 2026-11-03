@@ -1,0 +1,19 @@
+name: Governance policy tests
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  governance-policy-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test governance policy
+        run: node --test tests/governance_gate.test.cjs tests/governance_gate.integration.test.cjs
